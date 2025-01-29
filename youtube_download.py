@@ -1,14 +1,34 @@
 import yt_dlp
 import sys
 import json
+import psutil
+import os
 
 url = sys.argv[1]
+download_type = sys.argv[2]
 
-video_download_path = "/mnt/c/Users/anato/Videos/NOOOOO/"
-music_download_path = "/mnt/c/Users/anato/Music/"
+download_path = sys.argv[3].replace("\\", "/")
+if download_path[-1] != "/":
+    download_path += "/"
+
+parent = psutil.Process().parent().parent()
+shell_name = parent.name().lower()
+if shell_name == "powershell.exe":
+    if download_path[0:7] == "/mnt/c/":
+        download_path = "C:/" + download_path[7:]
+elif shell_name == "bash":
+    if download_path[0:3] == "C:/":
+        download_path = "/mnt/c/" + download_path[3:]
+
 
 def my_hook(d):
     filename = d['filename'].split("/")[-1]
+    filename_list = filename.split(".")
+    if filename_list[-1] == "mp4":
+        filename=""
+        for i in range(len(filename_list)-2):
+            filename += filename_list[i] + "."
+        filename += filename_list[len(filename_list)-1]
     download_status = {
         "status": d['status'],
         "filename": filename
@@ -23,20 +43,20 @@ def my_hook(d):
     print(download_status, flush=True)
 
 
-def download_video(url):
+def download_video(url, download_path):
     #browser = "chrome"
     ydl_opts = {
         'noprogress': True,
         'progress_hooks': [my_hook],
 	'format_sort': ['res:1080', 'ext:mp4:m4a'],
-	'outtmpl': video_download_path + '%(title)s.%(ext)s',
+	'outtmpl': download_path + '%(title)s.%(ext)s',
 	#'cookiesfrombrowser': browser,
     }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.download([url])
 
 
-def download_music(url):
+def download_music(url, download_path):
     ydl_opts = {
 	'format': 'm4a/bestaudio/best',
         'postprocessors': [{  # Extract audio using ffmpeg
@@ -45,7 +65,7 @@ def download_music(url):
 	}],
         'noprogress': True,
         'progress_hooks': [my_hook],
-	'outtmpl': music_download_path + '%(title)s.%(ext)s'
+	'outtmpl': download_path + '%(title)s.%(ext)s'
     }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.download([url])
@@ -61,7 +81,7 @@ def download_music(url):
         ydl.download([url])
     """
 
-if sys.argv[2] == "video":
-    download_video(url)
-elif sys.argv[2]=="music":
-    download_music(url)
+if download_type == "video":
+    download_video(url, download_path)
+elif download_type == "music":
+    download_music(url, download_path)

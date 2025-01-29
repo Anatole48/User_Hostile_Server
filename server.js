@@ -1,8 +1,8 @@
 var express = require('express');
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 
 const app = express();
-const PORT = 3000;
+const PORT = 2000;
 
 downloads_list = {}
 
@@ -24,41 +24,50 @@ app.post('/', (req,res,next) => {
 	res.end()
     } else {
         download_type = req.body.download_type
-        video_download(url, download_type, downloads_list)
+        download_path = req.body.download_path
+        video_download(url, download_type, download_path, downloads_list)
 	res.send("download_launched")
     }
 })
 
-app.listen(PORT, () => {
-  console.log(`Serveur en écoute sur http://localhost:${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+  console.log('Serveur en écoute. Port : ' + PORT.toString() );
 });
 
 module.exports = app;
 
 
-const video_download = (url, download_type, downloads_list) => {
+const video_download = (url, download_type, download_path, downloads_list) => {
     downloads_list[url] = {
         "status": "Initialisation"
     }
-    const video_download_process = spawn('python3', ['Youtube_Download.py', url, download_type]);
-    video_download_process.stdout.on('data', (data) => {
-	data = data.toString()
-	try {
-	    data = JSON.parse(data)
-	    downloads_list[url] = data
-	} catch {
-	    let response = data.trim()
-	    if (response.substr(-27,27) == "has already been downloaded"){
-		downloads_list[url] = {
-		    "status": "finished"
-		}
-		console.log("VIDEO ALREADY DOWNLOADED")
-	    } else if ((response.substr(0,6) != "[info]") && (response.substr(0,9) != "[youtube]") && (response.substr(0,10) != "[download]") && (response.substr(0,8) != "[Merger]") && (response.substr(0,11) != "[hlsnative]") && (response.substr(0,8) != "Deleting")){
-		console.log("JSON PARSE ERROR CATCH")
-		console.log(response)
-	    }
-	}
 
+    let is_python3_installed = spawnSync('python3', ['--version']).status
+    let is_python_installed = spawnSync('python', ['--version']).status
+    let python_to_use = ""
+    if (is_python3_installed === 0) {
+        python_to_use = "python3"
+    } else if (is_python_installed === 0) {
+        python_to_use = "python"
+    }
+    const video_download_process = spawn(python_to_use, ['Youtube_Download.py', url, download_type, download_path]);
+    video_download_process.stdout.on('data', (data) => {
+        data = data.toString()
+        try {
+            data = JSON.parse(data)
+            downloads_list[url] = data
+        } catch {
+            let response = data.trim()
+            if (response.substr(-27,27) == "has already been downloaded"){
+            downloads_list[url] = {
+                "status": "finished"
+            }
+            console.log("VIDEO ALREADY DOWNLOADED")
+            } else if ((response.substr(0,6) != "[info]") && (response.substr(0,9) != "[youtube]") && (response.substr(0,10) != "[download]") && (response.substr(0,8) != "[Merger]") && (response.substr(0,11) != "[hlsnative]") && (response.substr(0,8) != "Deleting")){
+            console.log("JSON PARSE ERROR CATCH")
+            console.log(response)
+            }
+        }
     });
 
     video_download_process.stderr.on('data', (data) => {
