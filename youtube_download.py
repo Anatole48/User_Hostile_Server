@@ -22,13 +22,17 @@ elif shell_name == "bash":
 
 
 def my_hook(d):
-    filename = d['filename'].split("/")[-1]
-    filename_list = filename.split(".")
-    if filename_list[-1] == "mp4":
-        filename=""
-        for i in range(len(filename_list)-2):
+    default_filename = d['filename'].split("/")[-1]
+    filename_list = default_filename.split(".")
+    filename = ""
+    if "format_id" in d.get("info_dict", {}) and filename_list[-2]=='f'+d['info_dict']['format_id'] :
+        del(filename_list[-2])
+        for i in range(len(filename_list)-1):
             filename += filename_list[i] + "."
         filename += filename_list[len(filename_list)-1]
+    else :
+        filename = default_filename
+
     download_status = {
         "status": d['status'],
         "filename": filename
@@ -39,18 +43,24 @@ def my_hook(d):
             "speed": d['_speed_str'],
             "remaining_time": d['_eta_str']
         }
-    download_status = json.dumps(download_status)
-    print(download_status, flush=True)
+
+    if filename_list[-1]!='vtt':
+        download_status = json.dumps(download_status)
+        print(download_status, flush=True)
 
 
 def download_video(url, download_path):
-    #browser = "chrome"
     ydl_opts = {
         'noprogress': True,
         'progress_hooks': [my_hook],
-	'format_sort': ['res:1080', 'ext:mp4:m4a'],
-	'outtmpl': download_path + '%(title)s.%(ext)s',
-	#'cookiesfrombrowser': browser,
+	    'format_sort': ['res:1080', 'ext:mkv'],
+	    'outtmpl': download_path + '%(title)s.%(ext)s',
+        'writesubtitles': True,
+        'writeautomaticsub': True,
+        'subtitleslangs': ['en', 'fr'],
+        'postprocessors': [
+            {'key': 'FFmpegEmbedSubtitle'}
+        ]
     }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.download([url])
@@ -58,28 +68,18 @@ def download_video(url, download_path):
 
 def download_music(url, download_path):
     ydl_opts = {
-	'format': 'm4a/bestaudio/best',
-        'postprocessors': [{  # Extract audio using ffmpeg
-            'key': 'FFmpegExtractAudio',
-            'preferredcodec': 'm4a',
-	}],
+        'format': 'm4a/bestaudio/best',
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'm4a',
+        }],
         'noprogress': True,
         'progress_hooks': [my_hook],
-	'outtmpl': download_path + '%(title)s.%(ext)s'
+	    'outtmpl': download_path + '%(title)s.%(ext)s'
     }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.download([url])
-    """
-    ydl_opts = {
-        'format': 'm4a/bestaudio/best',
-        'postprocessors': [{  # Extract audio using ffmpeg
-            'key': 'FFmpegExtractAudio',
-            'preferredcodec': 'm4a',
-        }]
-    }
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        ydl.download([url])
-    """
+
 
 if download_type == "video":
     download_video(url, download_path)
