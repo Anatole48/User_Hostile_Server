@@ -6,7 +6,6 @@ import os
 
 url = sys.argv[1]
 download_type = sys.argv[2]
-
 download_path = sys.argv[3].replace("\\", "/")
 if download_path[-1] != "/":
     download_path += "/"
@@ -22,7 +21,7 @@ elif shell_name == "bash":
 
 
 def my_hook(d):
-    default_filename = d['filename'].split("/")[-1]
+    default_filename = d['filename'].replace("\\", "/").split("/")[-1]
     filename_list = default_filename.split(".")
     filename = ""
     if "format_id" in d.get("info_dict", {}) and filename_list[-2]=='f'+d['info_dict']['format_id'] :
