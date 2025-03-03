@@ -50,7 +50,7 @@ const video_download = (url, download_type, download_path, downloads_list) => {
     } else if (is_python_installed === 0) {
         python_to_use = "python"
     }
-    const video_download_process = spawn(python_to_use, ['Youtube_Download.py', url, download_type, download_path]);
+    const video_download_process = spawn(python_to_use, [__dirname + '/Youtube_Download.py', url, download_type, download_path]);
     video_download_process.stdout.on('data', (data) => {
         data = data.toString()
         try {
