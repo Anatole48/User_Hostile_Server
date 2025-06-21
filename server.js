@@ -16,13 +16,17 @@ app.use((req, res, next) => {
 });
 
 app.post('/', (req,res,next) => {
-    url = req.body.video_url
-    if (req.body.purpose == "check_download_status"){
+    if (req.body.purpose == "check_download_status_initialization"){
+        res.json(downloads_list)
+    } else if (req.body.purpose == "check_download_status"){
+        url = req.body.video_url
         res.json(downloads_list[url])
     } else if (req.body.purpose == "clear_downloaded_video_data"){
-	delete downloads_list[url]
-	res.end()
+        url = req.body.video_url
+        delete downloads_list[url]
+        res.end()
     } else {
+        url = req.body.video_url
         download_type = req.body.download_type
         download_path = req.body.download_path
         video_download(url, download_type, download_path, downloads_list)
