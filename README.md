@@ -6,5 +6,7 @@ pip install psutil
 En mode administrateur :
 choco install ffmpeg
 
+Désinstaller/désactiver McAfee.
+
 node .\server.js
 
