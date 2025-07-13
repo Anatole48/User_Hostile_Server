@@ -15,7 +15,7 @@ shell_name = parent.name().lower()
 if shell_name == "powershell.exe":
     if download_path[0:7] == "/mnt/c/":
         download_path = "C:/" + download_path[7:]
-elif shell_name == "bash":
+elif shell_name == "bash" or shell_name == "tmux: server":
     if download_path[0:3] == "C:/":
         download_path = "/mnt/c/" + download_path[3:]
 
