@@ -3,7 +3,7 @@ npm install
 npm install express
 
 Sur Powershell :
-pip install yt-dlp
+pip install "yt-dlp[default,curl-cffi]"
 pip install psutil
 En mode administrateur :
 choco install ffmpeg
