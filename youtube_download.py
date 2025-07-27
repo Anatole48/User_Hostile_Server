@@ -55,11 +55,11 @@ def download_video(url, download_path):
 	    'format_sort': ['res:1080', 'ext:mkv'],
 	    'outtmpl': download_path + '%(title)s.%(ext)s',
         'writesubtitles': True,
-        'writeautomaticsub': True,
         'subtitleslangs': ['en', 'fr'],
         'postprocessors': [
             {'key': 'FFmpegEmbedSubtitle'}
-        ]
+        ],
+        'ignoreerrors': True
     }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.download([url])
@@ -74,7 +74,8 @@ def download_music(url, download_path):
         }],
         'noprogress': True,
         'progress_hooks': [my_hook],
-	    'outtmpl': download_path + '%(title)s.%(ext)s'
+	    'outtmpl': download_path + '%(title)s.%(ext)s',
+        'ignoreerrors': True
     }
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         ydl.download([url])

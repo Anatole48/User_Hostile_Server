@@ -67,8 +67,8 @@ const video_download = (url, download_type, download_path, downloads_list) => {
                 "status": "finished"
             }
             console.log("VIDEO ALREADY DOWNLOADED")
-            } else if ((response.substr(0,6) != "[info]") && (response.substr(0,9) != "[youtube]") && (response.substr(0,10) != "[download]") && (response.substr(0,8) != "[Merger]") && (response.substr(0,11) != "[hlsnative]") && (response.substr(0,8) != "Deleting")){
-            console.log("JSON PARSE ERROR CATCH")
+            } else if ((response.substr(0,6) != "[info]") && (response.substr(0,9) != "[youtube]") && (response.substr(0,10) != "[download]") && (response.substr(0,8) != "[Merger]") && (response.substr(0,11) != "[hlsnative]") && (response.substr(0,8) != "Deleting") && (response.substr(0,15) != "[EmbedSubtitle]")){
+            console.log("Erreur du server JS")
             console.log(response)
             }
         }
