@@ -26,11 +26,16 @@ app.post('/', (req,res,next) => {
         delete downloads_list[url]
         res.end()
     } else {
-        url = req.body.video_url
+        url = req.body.url
+        title = req.body.title
         download_type = req.body.download_type
         download_path = req.body.download_path
-        video_download(url, download_type, download_path, downloads_list)
-	res.send("download_launched")
+        video_download(url, title, download_type, download_path, downloads_list)
+        downloads_list[url] = {
+            "filename": title,
+            "status": "Initialisation..."
+        }
+	    res.json(downloads_list[url])
     }
 })
 
@@ -41,11 +46,7 @@ app.listen(PORT, '0.0.0.0', () => {
 module.exports = app;
 
 
-const video_download = (url, download_type, download_path, downloads_list) => {
-    downloads_list[url] = {
-        "status": "Initialisation"
-    }
-
+const video_download = (url, title, download_type, download_path, downloads_list) => {
     let is_python3_installed = spawnSync('python3', ['--version']).status
     let is_python_installed = spawnSync('python', ['--version']).status
     let python_to_use = ""
@@ -54,22 +55,24 @@ const video_download = (url, download_type, download_path, downloads_list) => {
     } else if (is_python_installed === 0) {
         python_to_use = "python"
     }
-    const video_download_process = spawn(python_to_use, [__dirname + '/Youtube_Download.py', url, download_type, download_path]);
+
+    const video_download_process = spawn(python_to_use, [__dirname + '/Youtube_Download.py', url, title, download_type, download_path]);
     video_download_process.stdout.on('data', (data) => {
-        data = data.toString()
+        data = data.toString().trim().split("\n")[0]
         try {
             data = JSON.parse(data)
             downloads_list[url] = data
         } catch {
-            let response = data.trim()
+            let response = data
             if (response.substr(-27,27) == "has already been downloaded"){
-            downloads_list[url] = {
-                "status": "finished"
-            }
-            console.log("VIDEO ALREADY DOWNLOADED")
-            } else if ((response.substr(0,6) != "[info]") && (response.substr(0,9) != "[youtube]") && (response.substr(0,10) != "[download]") && (response.substr(0,8) != "[Merger]") && (response.substr(0,11) != "[hlsnative]") && (response.substr(0,8) != "Deleting") && (response.substr(0,15) != "[EmbedSubtitle]")){
-            console.log("Erreur du server JS")
-            console.log(response)
+                downloads_list[url] = {
+                    "filename": title,
+                    "status": "END"
+                }
+                console.log("VIDEO ALREADY DOWNLOADED")
+            } else if ((response.substr(0,6) != "[info]") && (response.substr(0,9) != "[youtube]") && (response.substr(0,10) != "[download]") && (response.substr(0,8) != "[Merger]") && (response.substr(0,11) != "[hlsnative]") && (response.substr(0,8) != "Deleting") && (response.substr(0,15) != "[EmbedSubtitle]") && (response.substr(0,26) != "[ExtractAudio] Destination")){
+                console.log("Erreur du server JS")
+                console.log(response)
             }
         }
     });
