@@ -15,6 +15,14 @@ import re
 import unicodedata
 import numpy as np
 
+whisper_model_ram_GB_need = {
+    "tiny": 1,
+    "base": 1,
+    "small": 1.5,
+    "medium": 5,
+    "large": 10,
+    "turbo": 6
+}
 
 def my_hook(d):
     default_filename = d['filename'].replace("\\", "/").split("/")[-1]
@@ -110,10 +118,35 @@ def start_timer(filename, duration):
     return stop
 
 
-def get_video_duration(video_file):
+def get_media_duration(video_file):
     probe = ffmpeg.probe(video_file)
     video_duration = float(probe['format']['duration'])
     return video_duration
+
+
+def get_media_language(whisper_model, input_file, video_duration):
+    # Taille d'un segment de 30 secondes (en échantillons)
+    chunk_size = 30 * whisper.audio.SAMPLE_RATE  
+
+    # Calculer le point de départ : milieu de la vidéo - 15s
+    start_time = max(0, (video_duration/2 - 15))
+    start_sample = int(start_time * whisper.audio.SAMPLE_RATE)
+    end_sample = start_sample + chunk_size
+
+    # Extraire la portion
+    audio = whisper.load_audio(input_file)
+    chunk = audio[start_sample:end_sample]
+
+    # Charger l'audio et prendre 60 secondes
+    audio = whisper.pad_or_trim(chunk, length=chunk_size)
+
+    # Calculer spectrogramme
+    mel = whisper.log_mel_spectrogram(audio).to(whisper_model.device)
+
+    # Détection de langue
+    _, probs = whisper_model.detect_language(mel)
+    language = max(probs, key=probs.get)
+    return(language)
 
 
 # Convertir temps au format hh:mm:ss,ms
@@ -126,9 +159,9 @@ def timestamp_to_srt_time_format_conversion(timestamp):
 
 
 # Sauvegarder en format SRT
-def subtitle_generation(video_title, input_file):
+def subtitle_generation(whisper_model, video_title, input_file):
     subtitle_generation_duration_filename = os.path.dirname(os.path.abspath(__file__)) + "/subtitle_generation_duration.txt"
-    video_duration = get_video_duration(input_file)
+    video_duration = get_media_duration(input_file)
     lines = []
     if os.path.exists(subtitle_generation_duration_filename):
         with open(subtitle_generation_duration_filename, "r", encoding="utf-8") as subtitle_generation_duration_file:
@@ -155,12 +188,14 @@ def subtitle_generation(video_title, input_file):
     date = time.strftime("%Y-%m-%d")
     fonction_begin_timestamp = time.time()
 
+    language = get_media_language(whisper_model, input_file, video_duration)
     transcript = whisper_model.transcribe(
         input_file,
         task="transcribe",         # Pour transcription (et non traduction)
+        language=language,
         fp16=False                 # À desactiver si pas de GPU compatible
     )
-    language = transcript.get("language", "unknown")
+    
     output_file = input_file[:-4] + "_" + language + ".srt"
     with open(output_file, "w", encoding="utf-8") as subtitle_file:
         for segment in transcript["segments"]:
@@ -208,15 +243,21 @@ def translate_subtitles(title, input_subtitle_language, input_file, output_file)
             if line.strip().isdigit() or "-->" in line or line.strip() == "":
                 translated_lines.append(line)
             else:
-                translated = GoogleTranslator(source=input_subtitle_language, target='fr').translate(line)
-                translated_lines.append(translated + "\n")
+                try:
+                    translated = GoogleTranslator(source=input_subtitle_language, target='fr').translate(line)
+                except:
+                    translated = line
+                if translated == None:
+                    translated_lines.append("\n")
+                else:
+                    translated_lines.append(translated + "\n")
 
         with open(output_file, "w", encoding="utf-8") as output_subtitle_file:
             output_subtitle_file.writelines(translated_lines)
 
 
-def all_subtitle_generation(url, title, video_path):
-    (origin_language, origin_language_subtitle_file) = subtitle_generation(title, video_path)
+def all_subtitle_generation(whisper_model, url, title, video_path):
+    (origin_language, origin_language_subtitle_file) = subtitle_generation(whisper_model, title, video_path)
     french_subtitle_file = origin_language_subtitle_file[:-6] + "_fr.srt"
     translate_subtitles(title, origin_language, origin_language_subtitle_file, french_subtitle_file)
 
@@ -257,45 +298,74 @@ def merge_video_and_subtitles(video_path, subtitle_files_list, output_path):
         print(f"Erreur lors de l'exécution de ffmpeg : {e}")
 
 
-if __name__ == "__main__":
-    #GENERATION DE SOUS TITRES 
-    whisper_model = whisper.load_model("tiny")
+url = sys.argv[1]
+title = sys.argv[2]
+download_type = sys.argv[3]
+download_path = sys.argv[4].replace("\\", "/")
+if download_path[-1] != "/":
+    download_path += "/"
 
-    url = sys.argv[1]
-    title = sys.argv[2]
-    download_type = sys.argv[3]
-    download_path = sys.argv[4].replace("\\", "/")
-    if download_path[-1] != "/":
-        download_path += "/"
-
-    parent = psutil.Process().parent().parent()
-    shell_name = parent.name().lower()
-    if shell_name == "powershell.exe":
-        if download_path[0:7] == "/mnt/c/":
-            download_path = "C:/" + download_path[7:]
-    elif shell_name == "bash" or shell_name == "tmux: server":
-        if download_path[0:3] == "C:/":
-            download_path = "/mnt/c/" + download_path[3:]
+parent = psutil.Process().parent().parent()
+shell_name = parent.name().lower()
+if shell_name == "powershell.exe":
+    if download_path[0:7] == "/mnt/c/":
+        download_path = "C:/" + download_path[7:]
+elif shell_name == "bash" or shell_name == "tmux: server":
+    if download_path[0:3] == "C:/":
+        download_path = "/mnt/c/" + download_path[3:]
 
 
-    if download_type == "video":
+if download_type == "video":
+    if not os.path.isfile(download_path + title + ".mkv"):
         normalize_title = string_normalisation(title)
         subtile_build_directory = download_path + normalize_title + "/"
         os.makedirs(subtile_build_directory , exist_ok=True)
         download_video(url, title, subtile_build_directory)
         downloaded_file = subtile_build_directory + os.listdir(subtile_build_directory)[0]
-        all_subtitle_generation(url, title, downloaded_file)
-        output_video_path = download_path + title + ".mkv"
-        subtitle_files_list = [str(path) for path in Path(subtile_build_directory).glob("*.srt")]
-        merge_video_and_subtitles(downloaded_file, subtitle_files_list, output_video_path)
-        shutil.rmtree(subtile_build_directory, ignore_errors=True)
+        
+        whisper_size_model = "small"
+        is_enough_ram = False
+        subtitle_start_timestamp = time.time()
+        whisper_ram_needed = whisper_model_ram_GB_need[whisper_size_model]
+        while not is_enough_ram:
+            available_ram = psutil.virtual_memory().available/(1024**3)
+            current_timestamp = time.time()
+            if (available_ram > whisper_ram_needed) or ((current_timestamp - subtitle_start_timestamp) > 7200):
+                is_enough_ram = True
 
-    elif download_type == "music":
+                whisper_model = whisper.load_model(whisper_size_model)
+                all_subtitle_generation(whisper_model, url, title, downloaded_file)
+
+                output_video_path = download_path + title + ".mkv"
+                subtitle_files_list = [str(path) for path in Path(subtile_build_directory).glob("*.srt")]
+                merge_video_and_subtitles(downloaded_file, subtitle_files_list, output_video_path)
+                shutil.rmtree(subtile_build_directory, ignore_errors=True)
+            else:
+                time.sleep(10)
+    else:
+        download_status = {
+            "filename": title,
+            "status": "Already Downloaded"
+        }
+        download_status = json.dumps(download_status)
+        print(download_status, flush=True)
+        time.sleep(2)
+
+elif download_type == "music":
+    if not os.path.isfile(download_path + title + ".m4a"):
         download_music(url, title, download_path)
- 
-    download_status = {
-        "filename": title,
-        "status": "END"
-    }
-    download_status = json.dumps(download_status)
-    print(download_status, flush=True)
+    else:
+        download_status = {
+            "filename": title,
+            "status": "Already Downloaded"
+        }
+        download_status = json.dumps(download_status)
+        print(download_status, flush=True)
+        time.sleep(2)
+
+download_status = {
+    "filename": title,
+    "status": "END"
+}
+download_status = json.dumps(download_status)
+print(download_status, flush=True)

@@ -30,12 +30,16 @@ app.post('/', (req,res,next) => {
         title = req.body.title
         download_type = req.body.download_type
         download_path = req.body.download_path
-        video_download(url, title, download_type, download_path, downloads_list)
-        downloads_list[url] = {
-            "filename": title,
-            "status": "Initialisation..."
+        if (!(url in downloads_list)) {
+            video_download(url, title, download_type, download_path, downloads_list)
+            downloads_list[url] = {
+                "filename": title,
+                "status": "Initialisation..."
+            }
+            res.json(downloads_list[url])
+        } else {
+            res.end()
         }
-	    res.json(downloads_list[url])
     }
 })
 
