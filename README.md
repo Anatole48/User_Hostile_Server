@@ -13,6 +13,7 @@ python3 -m pip install -U yt-dlp
 pip install psutil
 pip install -U openai-whisper
 pip install -U ffmpeg-python
+pip install -U Flask
 deactivate
 
 Pour rediriger les requête du port 2000 du pc vers celui de wsl :
