@@ -1,7 +1,3 @@
-
-npm install
-npm install express
-
 Sur Powershell :
 pip install "yt-dlp[default,curl-cffi]"
 pip install psutil
@@ -41,7 +37,4 @@ PasswordAuthentication no
 Mettre les lignes suivantes en commentaire :
 #Match Group administrators
 #       AuthorizedKeysFile __PROGRAMDATA__/ssh/administrators_authorized_keys
-
-
-node .\server.js
 
