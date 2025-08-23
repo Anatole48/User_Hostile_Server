@@ -236,11 +236,6 @@ def subtitle_generation(whisper_model, download_status, url, video_title, input_
 
 
 def translate_subtitles(download_status, url, title, input_subtitle_language, input_file, output_file):
-    download_status[url] = {
-        "filename": title,
-        "status": "Subtitle Translation"
-    }
-
     if input_subtitle_language != 'fr':
         with open(input_file, "r", encoding="utf-8") as subtitle_original_file:
             subtitle_original_file_length = len(subtitle_original_file.readlines())
@@ -251,7 +246,11 @@ def translate_subtitles(download_status, url, title, input_subtitle_language, in
         translated_lines = []
         for i in range(len(lines)):
             line = lines[i]
-            download_status[url]["percent"] = str(round(i/subtitle_original_file_length*100, 1)) + "%"
+            download_status[url] = {
+                "filename": title,
+                "percent": str(round(i/subtitle_original_file_length*100, 1)) + "%",
+                "status": "Subtitle Translation"
+            }
             if line.strip().isdigit() or "-->" in line or line.strip() == "":
                 translated_lines.append(line)
             else:
@@ -386,7 +385,7 @@ def server_request_treatment():
             download_status[url] = {"filename": title, "status": "Initialisation..."}
             thread = threading.Thread(target=download_setup, args=(whisper_model, whisper_size_model, download_status, url, title, download_type, download_path))
             thread.start()
-            return jsonify(download_status[url])
+            return ("Download Launched")
         else:
             return("This file is already downloading")
 
