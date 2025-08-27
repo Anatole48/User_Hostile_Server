@@ -309,7 +309,7 @@ def merge_video_and_subtitles(video_path, subtitle_files_list, output_path):
         print(f"Erreur lors de l'exécution de ffmpeg : {e}")
 
 
-def download_setup(whisper_model, whisper_size_model, download_status, url, title, download_type, download_path):
+def download_setup(whisper_model, whisper_size_model, download_status, url, title, download_type, download_path, subtitle_generation):
     download_path = download_path.replace("\\", "/")
     if download_path[-1] != "/":
         download_path += "/"
@@ -324,17 +324,20 @@ def download_setup(whisper_model, whisper_size_model, download_status, url, titl
 
     if download_type == "video":
         if not os.path.isfile(download_path + title + ".mkv"):
-            normalize_title = string_normalisation(title)
-            subtile_build_directory = download_path + normalize_title + "/"
-            os.makedirs(subtile_build_directory , exist_ok=True)
-            download_video(url, title, download_status, subtile_build_directory)
-            downloaded_file = subtile_build_directory + os.listdir(subtile_build_directory)[0]
+            if subtitle_generation:
+                normalize_title = string_normalisation(title)
+                subtile_build_directory = download_path + normalize_title + "/"
+                os.makedirs(subtile_build_directory , exist_ok=True)
+                download_video(url, title, download_status, subtile_build_directory)
+                downloaded_file = subtile_build_directory + os.listdir(subtile_build_directory)[0]
             
-            all_subtitle_generation(whisper_model, download_status, url, title, downloaded_file)
-            output_video_path = download_path + title + ".mkv"
-            subtitle_files_list = [str(path) for path in Path(subtile_build_directory).glob("*.srt")]
-            merge_video_and_subtitles(downloaded_file, subtitle_files_list, output_video_path)
-            shutil.rmtree(subtile_build_directory, ignore_errors=True)
+                all_subtitle_generation(whisper_model, download_status, url, title, downloaded_file)
+                output_video_path = download_path + title + ".mkv"
+                subtitle_files_list = [str(path) for path in Path(subtile_build_directory).glob("*.srt")]
+                merge_video_and_subtitles(downloaded_file, subtitle_files_list, output_video_path)
+                shutil.rmtree(subtile_build_directory, ignore_errors=True)
+            else:
+                download_video(url, title, download_status, download_path)
         else:
             download_status[url] = {
                 "filename": title,
@@ -380,10 +383,11 @@ def server_request_treatment():
         title = client_request["title"]
         download_type = client_request["download_type"]
         download_path = client_request["download_path"]
+        subtitle_generation = client_request["subtitle_generation"]
 
         if url not in download_status:
             download_status[url] = {"filename": title, "status": "Initialisation..."}
-            thread = threading.Thread(target=download_setup, args=(whisper_model, whisper_size_model, download_status, url, title, download_type, download_path))
+            thread = threading.Thread(target=download_setup, args=(whisper_model, whisper_size_model, download_status, url, title, download_type, download_path, subtitle_generation))
             thread.start()
             return ("Download Launched")
         else:
