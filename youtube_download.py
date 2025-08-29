@@ -361,9 +361,29 @@ def download_setup(whisper_model, whisper_size_model, download_status, url, titl
     }
 
 
-log = logging.getLogger('werkzeug')
-log.setLevel(logging.ERROR)
 app = Flask(__name__)
+
+logging_level = logging.WARNING
+server_folder_path = os.path.dirname(os.path.abspath(__file__))
+logging_path_file = server_folder_path + "/server.log"
+if os.path.exists(logging_path_file):
+    with open(logging_path_file, 'a', encoding='utf-8') as logfile:
+        logfile.write("\n\n\n")
+
+# Configurer le logger Flask/Werkzeug pour écrire les logs dans un fichier
+logging.basicConfig(
+    filename=logging_path_file,        # fichier de log
+    filemode='a',
+    level=logging_level,         # niveau minimum (DEBUG, INFO, WARNING, ERROR)
+    format="%(asctime)s [%(levelname)s] %(message)s"
+)
+
+# Configurer le logger pour continuer a afficher les logs dans la console
+console = logging.StreamHandler()
+console.setLevel(logging_level)
+formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
+console.setFormatter(formatter)
+logging.getLogger().addHandler(console)
 @app.route("/", methods=["POST"])
 def server_request_treatment():
     client_request = request.get_json()
