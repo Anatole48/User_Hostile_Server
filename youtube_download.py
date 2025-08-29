@@ -384,6 +384,18 @@ console.setLevel(logging_level)
 formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
 console.setFormatter(formatter)
 logging.getLogger().addHandler(console)
+
+
+@app.before_request
+def filter_non_http_requests():
+    # Recupere le protocol de la requete
+    request_protocol = request.environ.get("SERVER_PROTOCOL")
+    
+    # Ne traite pas les requetes non http
+    if request_protocol not in ("HTTP/1.1", "HTTP/2"):
+        return "", 204  # 204 = "No Content" → pas d'erreur
+
+
 @app.route("/", methods=["POST"])
 def server_request_treatment():
     client_request = request.get_json()
