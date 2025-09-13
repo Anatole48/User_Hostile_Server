@@ -10,6 +10,7 @@ from deep_translator import GoogleTranslator
 import subprocess
 from pathlib import Path
 import shutil
+import datetime
 import time
 import threading
 import ffmpeg
@@ -360,30 +361,54 @@ def download_setup(whisper_model, whisper_size_model, download_status, url, titl
         "status": "END"
     }
 
+class StreamTee:
+    def __init__(self, *streams):
+        self.streams = streams  # Stock toutes les sorties souhaitees
+
+    def write(self, message):
+        if message.strip():
+            date = str(datetime.date.today())
+            hour = datetime.datetime.now()
+            formated_hour = hour.strftime("%H:%M:%S") + "," + str(hour.microsecond)[0:3]
+            message = date + " " + formated_hour + " " + message
+        for stream in  self.streams:  # Ecrit le message dans toutes les sorties
+            if isinstance(stream, str):
+                with open(stream, "a", encoding="utf-8") as logfile:
+
+                    logfile.write(message)
+            else:
+                stream.write(message)
+                stream.flush()
+
+    def flush(self):
+        for stream in self.streams:
+            if not isinstance(stream, str):
+                stream.flush()
+
+server_folder_path = os.path.dirname(os.path.abspath(__file__))
+logging_path_file = server_folder_path + "/server.log"
+
+# Les messages renvoyer par le scripts sont inscris dans la console et le fichier log
+sys.stdout = StreamTee(sys.__stdout__, logging_path_file)
+sys.stderr = StreamTee(sys.__stderr__, logging_path_file)
+
 
 app = Flask(__name__)
 
 logging_level = logging.WARNING
-server_folder_path = os.path.dirname(os.path.abspath(__file__))
-logging_path_file = server_folder_path + "/server.log"
 if os.path.exists(logging_path_file):
     with open(logging_path_file, 'a', encoding='utf-8') as logfile:
         logfile.write("\n\n\n")
 
-# Configurer le logger Flask/Werkzeug pour écrire les logs dans un fichier
-logging.basicConfig(
-    filename=logging_path_file,        # fichier de log
-    filemode='a',
-    level=logging_level,         # niveau minimum (DEBUG, INFO, WARNING, ERROR)
-    format="%(asctime)s [%(levelname)s] %(message)s"
-)
+# Configurer le logger Werkzeug pour afficher les messages du serveur dans la console
+werkzeug_logger = logging.getLogger('werkzeug')
+werkzeug_logger.setLevel(logging_level)
+console_handler = logging.StreamHandler()
+console_handler.setFormatter(logging.Formatter("[%(levelname)s] %(message)s"))
+werkzeug_logger.addHandler(console_handler)
 
-# Configurer le logger pour continuer a afficher les logs dans la console
-console = logging.StreamHandler()
-console.setLevel(logging_level)
-formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
-console.setFormatter(formatter)
-logging.getLogger().addHandler(console)
+
+
 @app.route("/", methods=["POST"])
 def server_request_treatment():
     client_request = request.get_json()
