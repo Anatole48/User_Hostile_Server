@@ -107,7 +107,7 @@ def start_timer(url, filename, duration, download_status):
     running = True
     download_status[url] = {
         "filename": filename,
-        "status": "Subtitle Generation"
+        "status": "Native Subtitle Generation"
     }
 
     def show_elapsed_time(download_status, duration):
@@ -172,17 +172,23 @@ def timestamp_to_srt_time_format_conversion(timestamp):
 
 
 # Sauvegarder en format SRT
-def subtitle_generation(whisper_model, download_status, url, video_title, input_file):
+def subtitle_generation(download_type, whisper_model, download_status, url, video_title, input_file):
+    if download_type == "video":
+        subtitle_generation_duration_name = "video_subtitle_generation_duration.txt"
+    elif download_type== "music":
+        subtitle_generation_duration_name = "music_subtitle_generation_duration.txt"
+
     with lock:
-        subtitle_generation_duration_filename = os.path.dirname(os.path.abspath(__file__)) + "/subtitle_generation_duration.txt"
+        subtitle_generation_duration_filename = os.path.dirname(os.path.abspath(__file__)) + "/" + subtitle_generation_duration_name
         video_duration = get_media_duration(input_file)
         lines = []
+        header = "date reel_generation_time estimated_generation_time"
         if os.path.exists(subtitle_generation_duration_filename):
             with open(subtitle_generation_duration_filename, "r", encoding="utf-8") as subtitle_generation_duration_file:
                 lines = subtitle_generation_duration_file.readlines()
 
             subtitle_generation_stats = []
-            for line in lines:
+            for line in lines[1:]:
                 striped_line = line[:-1].split(" ")
                 video_duration_history = float(striped_line[1])
                 subtitle_generation_duration_history = float(striped_line[2])
@@ -196,6 +202,7 @@ def subtitle_generation(whisper_model, download_status, url, video_title, input_
             else:
                 estimated_generation_time = video_duration*subtitle_generation_duration_history/video_duration_history
         else:
+            lines += [header + "\n"]
             estimated_generation_time = 1000
 
         stop_timer = start_timer(url, video_title, estimated_generation_time, download_status)
@@ -226,73 +233,85 @@ def subtitle_generation(whisper_model, download_status, url, video_title, input_
         
         max_lines = 1000
         if len(lines) >= max_lines:
-            lines = lines[len(lines) - max_lines + 1:]
+            lines = [header + "\n"] + lines[len(lines) - max_lines + 2:]
         
         reel_generation_time = fonction_end_timestamp - fonction_begin_timestamp
-        lines += [f"{date} {video_duration} {reel_generation_time} {(reel_generation_time - estimated_generation_time)/estimated_generation_time*100}\n"] 
+        lines += [f"{date} {video_duration} {reel_generation_time} {estimated_generation_time}\n"] 
 
         with open(subtitle_generation_duration_filename, "w", encoding="utf-8") as subtitle_generation_duration_file:
             subtitle_generation_duration_file.writelines(lines)
         return(language, output_file)
 
 
-def translate_subtitles(download_status, url, title, input_subtitle_language, input_file, output_file):
-    if input_subtitle_language != 'fr':
-        with open(input_file, "r", encoding="utf-8") as subtitle_original_file:
-            subtitle_original_file_length = len(subtitle_original_file.readlines())
+def translate_subtitles(download_status, url, title, input_subtitle_language, input_file, translate_language_label, translate_language_code, output_file):
+    with open(input_file, "r", encoding="utf-8") as subtitle_original_file:
+        subtitle_original_file_length = len(subtitle_original_file.readlines())
 
-        with open(input_file, "r", encoding="utf-8") as input_subtitle_file:
-            lines = input_subtitle_file.readlines()
+    with open(input_file, "r", encoding="utf-8") as input_subtitle_file:
+        lines = input_subtitle_file.readlines()
 
-        translated_lines = []
-        for i in range(len(lines)):
-            line = lines[i]
-            download_status[url] = {
-                "filename": title,
-                "percent": str(round(i/subtitle_original_file_length*100, 1)) + "%",
-                "status": "Subtitle Translation"
-            }
-            if line.strip().isdigit() or "-->" in line or line.strip() == "":
-                translated_lines.append(line)
+    translated_lines = []
+    for i in range(len(lines)):
+        line = lines[i]
+        download_status[url] = {
+            "filename": title,
+            "percent": str(round(i/subtitle_original_file_length*100, 1)) + "%",
+            "status": "Subtitle Translation to " + translate_language_label
+        }
+        if line.strip().isdigit() or "-->" in line or line.strip() == "":
+            translated_lines.append(line)
+        else:
+            try:
+                translated = GoogleTranslator(source=input_subtitle_language, target=translate_language_code).translate(line)
+            except:
+                translated = line
+            if translated == None:
+                translated_lines.append("\n")
             else:
-                try:
-                    translated = GoogleTranslator(source=input_subtitle_language, target='fr').translate(line)
-                except:
-                    translated = line
-                if translated == None:
-                    translated_lines.append("\n")
-                else:
-                    translated_lines.append(translated + "\n")
+                translated_lines.append(translated + "\n")
 
-        with open(output_file, "w", encoding="utf-8") as output_subtitle_file:
-            output_subtitle_file.writelines(translated_lines)
+    with open(output_file, "w", encoding="utf-8") as output_subtitle_file:
+        output_subtitle_file.writelines(translated_lines)
 
 
-def all_subtitle_generation(whisper_model, download_status, url, title, video_path):
-    (origin_language, origin_language_subtitle_file) = subtitle_generation(whisper_model, download_status, url, title, video_path)
-    french_subtitle_file = origin_language_subtitle_file[:-6] + "_fr.srt"
-    translate_subtitles(download_status, url, title, origin_language, origin_language_subtitle_file, french_subtitle_file)
+def all_subtitle_generation(download_type, whisper_model, download_status, url, title, video_path, subtitle_languages_list):
+    if "Native" in subtitle_languages_list:
+        del subtitle_languages_list["Native"]
+        (native_language, native_language_subtitle_file) = subtitle_generation(download_type, whisper_model, download_status, url, title, video_path)
+        for translate_language_label, translate_language_code in subtitle_languages_list.items():
+            if translate_language_code != native_language :
+                translate_subtitle_file = native_language_subtitle_file[:-7] + "_" + translate_language_code + ".srt"
+                translate_subtitles(download_status, url, title, native_language, native_language_subtitle_file, translate_language_label, translate_language_code, translate_subtitle_file)
 
 
-def merge_video_and_subtitles(video_path, subtitle_files_list, output_path):
-    command = [
-        "ffmpeg",
-        "-i", video_path
-    ]
+def merge_media_file_and_subtitles(video_path, subtitle_files_list, download_type, output_path):
+    command = ["ffmpeg"]
+
+    map_index = 0
+
+    if download_type == "music":
+        command += ["-f", "lavfi", "-i", "color=black:s=1280x720"]
+        map_index += 1
+    
+    command += ["-i", video_path]
 
     for k in range(len(subtitle_files_list)):
         command += ["-i", subtitle_files_list[k]]
 
-    command += [
-        "-map", "0:v",
-        "-map", "0:a"
-    ]
+    command += ["-map", "0:v"]
+    command += ["-map", str(map_index) + ":a"]
 
     for i in range(len(subtitle_files_list)):
-        command += ["-map", str(i+1) + ":0"]
+        map_index += 1
+        command += ["-map", str(map_index) + ":0"]
+
+    if download_type == "music":
+        command += ["-c:v", "libx264", "-tune", "stillimage", "-shortest"]
+    elif download_type == "video":
+        command += ["-c:v", "copy"]
 
     command += [
-        "-c", "copy",
+        "-c:a", "copy",
         "-c:s", "srt"
     ]
 
@@ -310,7 +329,43 @@ def merge_video_and_subtitles(video_path, subtitle_files_list, output_path):
         print(f"Erreur lors de l'exécution de ffmpeg : {e}")
 
 
-def download_setup(whisper_model, whisper_size_model, download_status, url, title, download_type, download_path, subtitle_generation):
+def download_media_file_with_subtitles(whisper_model, download_status, url, title, download_type, download_path, subtitle_generation, subtitle_languages_list):
+    download_media_function_choice={
+        "download_video": download_video,
+        "download_music": download_music
+    }
+    
+    if download_type == "video":
+        download_media_function_name = "download_video"
+        media_file_extension = "mkv"
+    elif download_type == "music":
+        download_media_function_name = "download_music"
+        media_file_extension = "m4a"
+
+    if not os.path.isfile(download_path + title + "." + media_file_extension):
+        if subtitle_generation and (subtitle_languages_list != {}):
+            normalize_title = string_normalisation(title)
+            subtile_build_directory = download_path + normalize_title + "/"
+            os.makedirs(subtile_build_directory , exist_ok=True)
+            download_media_function_choice[download_media_function_name](url, title, download_status, subtile_build_directory)
+            downloaded_file = subtile_build_directory + os.listdir(subtile_build_directory)[0]
+        
+            all_subtitle_generation(download_type, whisper_model, download_status, url, title, downloaded_file, subtitle_languages_list)
+            output_video_path = download_path + title + ".mkv"
+            subtitle_files_list = [str(path) for path in Path(subtile_build_directory).glob("*.srt")]
+            merge_media_file_and_subtitles(downloaded_file, subtitle_files_list, download_type, output_video_path)
+            shutil.rmtree(subtile_build_directory, ignore_errors=True)
+        else:
+            download_media_function_choice[download_media_function_name](url, title, download_status, download_path)
+    else:
+        download_status[url] = {
+            "filename": title,
+            "status": "Already Downloaded"
+        }
+        time.sleep(2)
+
+
+def download_setup(whisper_model, whisper_size_model, download_status, url, title, download_type, download_path, subtitle_generation, subtitle_languages_list):
     download_path = download_path.replace("\\", "/")
     if download_path[-1] != "/":
         download_path += "/"
@@ -323,54 +378,25 @@ def download_setup(whisper_model, whisper_size_model, download_status, url, titl
         if download_path[0:3] == "C:/":
             download_path = "/mnt/c/" + download_path[3:]
 
-    if download_type == "video":
-        if not os.path.isfile(download_path + title + ".mkv"):
-            if subtitle_generation:
-                normalize_title = string_normalisation(title)
-                subtile_build_directory = download_path + normalize_title + "/"
-                os.makedirs(subtile_build_directory , exist_ok=True)
-                download_video(url, title, download_status, subtile_build_directory)
-                downloaded_file = subtile_build_directory + os.listdir(subtile_build_directory)[0]
-            
-                all_subtitle_generation(whisper_model, download_status, url, title, downloaded_file)
-                output_video_path = download_path + title + ".mkv"
-                subtitle_files_list = [str(path) for path in Path(subtile_build_directory).glob("*.srt")]
-                merge_video_and_subtitles(downloaded_file, subtitle_files_list, output_video_path)
-                shutil.rmtree(subtile_build_directory, ignore_errors=True)
-            else:
-                download_video(url, title, download_status, download_path)
-        else:
-            download_status[url] = {
-                "filename": title,
-                "status": "Already Downloaded"
-            }
-            time.sleep(2)
-
-    elif download_type == "music":
-        if not os.path.isfile(download_path + title + ".m4a"):
-            download_music(url, title, download_status, download_path)
-        else:
-            download_status[url] = {
-                "filename": title,
-                "status": "Already Downloaded"
-            }
-            time.sleep(2)
+    download_media_file_with_subtitles(whisper_model, download_status, url, title, download_type, download_path, subtitle_generation, subtitle_languages_list)
 
     download_status[url] = {
         "filename": title,
         "status": "END"
     }
 
+
 class StreamTee:
     def __init__(self, *streams):
         self.streams = streams  # Stock toutes les sorties souhaitees
 
     def write(self, message):
-        if message.strip():
+        if message.strip() and message.strip()[-23:-18] != "12482":
             date = str(datetime.date.today())
             hour = datetime.datetime.now()
             formated_hour = hour.strftime("%H:%M:%S") + "," + str(hour.microsecond)[0:3]
             message = date + " " + formated_hour + " " + message
+            
         for stream in  self.streams:  # Ecrit le message dans toutes les sorties
             if isinstance(stream, str):
                 with open(stream, "a", encoding="utf-8") as logfile:
@@ -429,14 +455,16 @@ def server_request_treatment():
         download_type = client_request["download_type"]
         download_path = client_request["download_path"]
         subtitle_generation = client_request["subtitle_generation"]
+        subtitle_languages_list = client_request["subtitle_languages_list"]
 
         if url not in download_status:
             download_status[url] = {"filename": title, "status": "Initialisation..."}
-            thread = threading.Thread(target=download_setup, args=(whisper_model, whisper_size_model, download_status, url, title, download_type, download_path, subtitle_generation))
+            thread = threading.Thread(target=download_setup, args=(whisper_model, whisper_size_model, download_status, url, title, download_type, download_path, subtitle_generation, subtitle_languages_list))
             thread.start()
             return ("Download Launched")
         else:
             return("This file is already downloading")
+
 
 print('Serveur en écoute. Port : ' + str(PORT), flush=True)
 app.run(host="0.0.0.0", port=PORT, threaded=True)
