@@ -1,4 +1,5 @@
 from flask import Flask, request, jsonify
+from flask_cors import CORS
 import logging
 import yt_dlp
 import sys
@@ -457,6 +458,7 @@ sys.stderr = StreamTee(sys.__stderr__, logging_path_file)
 
 
 app = Flask(__name__)
+CORS(app)
 
 logging_level = logging.WARNING
 if os.path.exists(logging_path_file):
