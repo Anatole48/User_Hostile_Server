@@ -471,15 +471,20 @@ def download_setup(whisper_model, whisper_size_model, download_status, url, titl
 
 
 class StreamTee:
+    last_message_timestamp = 0
+
     def __init__(self, *streams):
         self.streams = streams  # Stock toutes les sorties souhaitees
 
     def write(self, message):
         if message.strip() and message.strip()[-23:-18] != "12482":
-            date = str(datetime.date.today())
-            hour = datetime.datetime.now()
-            formated_hour = hour.strftime("%H:%M:%S") + "," + str(hour.microsecond)[0:3]
-            message = date + " " + formated_hour + " " + message
+            message_timestamp = time.time()
+            if message_timestamp - StreamTee.last_message_timestamp > 1:
+                date = str(datetime.date.today())
+                hour = datetime.datetime.fromtimestamp(message_timestamp)
+                formated_hour = hour.strftime("%H:%M:%S") + "," + str(hour.microsecond)[0:3]
+                message = "\n" + date + " " + formated_hour + " " + message
+                StreamTee.last_message_timestamp = message_timestamp
             
         for stream in  self.streams:  # Ecrit le message dans toutes les sorties
             if isinstance(stream, str):
