@@ -19,6 +19,8 @@ import ffmpeg
 import re
 import unicodedata
 import numpy as np
+import matplotlib.pyplot as plt
+import pandas as pd
 
 lock = threading.Lock()
 
@@ -119,6 +121,31 @@ def string_normalisation(title):
     return title
 
 
+def hardware_stats_graph_generation(subtitle_generation_hardware_stats_file_path):
+    figure_title = subtitle_generation_hardware_stats_file_path.split("/")[-1][:-4]
+    data = pd.read_csv(subtitle_generation_hardware_stats_file_path, sep=" ")
+    x = data.iloc[:, -1]
+    columns = data.columns.tolist()
+
+    plt.figure(figure_title)
+    plt.xlabel("Subtitle generation duration (s)")
+    plt.ylabel("Hardware usage (%)")
+
+    cores_mean_usage_list = []
+    cores_number = len(columns)-2
+    for i in range(len(data.iloc[:, 1])):
+        cores_mean_usage = 0
+        for j in range(cores_number):
+            cores_mean_usage += data.iloc[i, j]
+        cores_mean_usage = cores_mean_usage/cores_number
+        cores_mean_usage_list += [cores_mean_usage]
+    plt.plot(x, cores_mean_usage_list, label="Cores_mean_usage")
+    plt.plot(x, data.iloc[:, -2], label="Memory_usage")
+    plt.title(figure_title)
+    plt.legend()
+    plt.savefig(subtitle_generation_hardware_stats_file_path + ".png")
+
+
 def start_timer(url, filename, duration, download_status, subtitle_generation_progress_queue):
     start_time = time.time()
     running = True
@@ -127,7 +154,16 @@ def start_timer(url, filename, duration, download_status, subtitle_generation_pr
         "status": "Native Subtitle Generation"
     }
 
-    def show_elapsed_time(download_status, duration, queue):
+    subtitle_generation_hardware_stats_file_lines = ""
+    subtitle_generation_hardware_stats_folder = "subtitle_generation_hardware_stats"
+    os.makedirs(subtitle_generation_hardware_stats_folder, exist_ok=True)
+    os.chmod(subtitle_generation_hardware_stats_folder, 0o755)
+    subtitle_generation_hardware_stats_file_path = subtitle_generation_hardware_stats_folder + "/" + str(round(duration)) + " - " + filename + " - Hardware usage" 
+    cores_number = psutil.cpu_count()
+    for i in range(cores_number):
+        subtitle_generation_hardware_stats_file_lines += "Core_" + str(i+1) + "_usage_percent "
+    subtitle_generation_hardware_stats_file_lines += "Memory_usage_percent Subtitle_generation_duration\n"
+    def show_elapsed_time(download_status, duration, queue, subtitle_generation_hardware_stats_file_path, subtitle_generation_hardware_stats_file_lines):
         while running:
             progression_percentage = round((((time.time() - start_time) / duration) * 100), 1)
             if progression_percentage < 100:
@@ -136,9 +172,17 @@ def start_timer(url, filename, duration, download_status, subtitle_generation_pr
             else:
                 download_status[url]["percent"] = "100%"
             subtitle_generation_progress_queue.put(download_status[url])
+
+            cores_usage_list = psutil.cpu_percent(interval=1, percpu=True)
+            mem_usage = psutil.virtual_memory().percent
+            for core_usage in cores_usage_list:
+                subtitle_generation_hardware_stats_file_lines += str(core_usage) + " "
+            subtitle_generation_hardware_stats_file_lines += str(mem_usage) + " " + str(time.time() - start_time) + "\n"
+            with open(subtitle_generation_hardware_stats_file_path, "w", encoding="utf-8") as subtitle_generation_hardware_stats_file:
+                subtitle_generation_hardware_stats_file.writelines(subtitle_generation_hardware_stats_file_lines)
             time.sleep(1)
 
-    timer_thread = threading.Thread(target=show_elapsed_time, args=(download_status, duration, subtitle_generation_progress_queue))
+    timer_thread = threading.Thread(target=show_elapsed_time, args=(download_status, duration, subtitle_generation_progress_queue, subtitle_generation_hardware_stats_file_path, subtitle_generation_hardware_stats_file_lines))
     timer_thread.daemon = True
     timer_thread.start()
 
@@ -146,7 +190,7 @@ def start_timer(url, filename, duration, download_status, subtitle_generation_pr
         nonlocal running  # Permet de modifier la variable `running` définie dans la fonction parente
         running = False
     
-    return stop
+    return (subtitle_generation_hardware_stats_file_path, stop)
 
 
 def get_media_duration(video_file):
@@ -222,7 +266,7 @@ def subtitle_generation(download_type, whisper_model, download_status, url, vide
         lines += [header + "\n"]
         estimated_generation_time = 1000
 
-    stop_timer = start_timer(url, video_title, estimated_generation_time, download_status, subtitle_generation_progress_queue)
+    (subtitle_generation_hardware_stats_file_path, stop_timer) = start_timer(url, video_title, estimated_generation_time, download_status, subtitle_generation_progress_queue)
     date = time.strftime("%Y-%m-%d")
     fonction_begin_timestamp = time.time()
 
@@ -259,6 +303,8 @@ def subtitle_generation(download_type, whisper_model, download_status, url, vide
         subtitle_generation_duration_file.writelines(lines)
 
     native_language_queue.put((language, output_file))
+
+    hardware_stats_graph_generation(subtitle_generation_hardware_stats_file_path)
 
 
 def translate_subtitles(download_status, url, title, input_subtitle_language, input_file, translate_language_label, translate_language_code, output_file, cancel_download):
