@@ -41,24 +41,14 @@ cancel_download_dict = {}
 whisper_size_model = "small"
 whisper_model = whisper.load_model(whisper_size_model)
 
-def make_hook(url, download_status, cancel_download):
+def make_hook(url, title, download_status, cancel_download):
     def my_hook(d):
-        default_filename = d['filename'].replace("\\", "/").split("/")[-1]
-        filename_list = default_filename.split(".")
-        filename = ""
-        if "format_id" in d.get("info_dict", {}) and filename_list[-2]=='f'+d['info_dict']['format_id'] :
-            del(filename_list[-2])
-        del(filename_list[-1])
-        for i in range(len(filename_list)-1):
-            filename += filename_list[i] + "."
-        filename += filename_list[len(filename_list)-1]
-
         if cancel_download.is_set():
             raise yt_dlp.utils.DownloadCancelled("Download cancelled by user")
 
         if d['status'] == 'downloading':
             download_status[url] = {
-                "filename": filename,
+                "filename": title,
                 "percent": d['_percent_str'],
                 "remaining_time": d['_eta_str']
             }
@@ -70,8 +60,9 @@ def download_video(url, title, download_status, download_path, cancel_download):
         download_file_path =  download_path + title + '.%(ext)s'
         ydl_opts = {
             'noprogress': True,
+            'retries': 10,
             "quiet": True,
-            'progress_hooks': [make_hook(url, download_status, cancel_download)],
+            'progress_hooks': [make_hook(url, title, download_status, cancel_download)],
             'no_color': True,
             'format_sort': ['res:1080', 'ext:mkv'],
             'outtmpl': download_file_path,
@@ -95,8 +86,9 @@ def download_music(url, title, download_status, download_path, cancel_download):
                 'preferredcodec': 'm4a',
             }],
             'noprogress': True,
+            'retries': 10,
             "quiet": True,
-            'progress_hooks': [make_hook(url, download_status, cancel_download)],
+            'progress_hooks': [make_hook(url, title, download_status, cancel_download)],
             'no_color': True,
             'outtmpl': download_path + title + '.%(ext)s',
         }
@@ -115,9 +107,9 @@ def string_normalisation(title):
     title = title.encode("ascii", "ignore").decode("ascii")  # Supprime les caractères non-ASCII
 
     # Remplace les séparateurs typiques et caractères problématiques
-    title = re.sub(r"[\/:*?\"<>|]", " ", title)  # Caractères interdits sous Windows
+    title = re.sub(r"[*?\"<>]", "", title)  # Caractères interdits sous Windows
+    title = re.sub(r"[\/:|]", "-", title)  # Caractères interdits sous Windows
     title = re.sub(r"\s+", " ", title).strip()   # Supprime les espaces multiples
-    title = re.sub(r"[^\w\s\-\.]", "", title)    # Garde lettres, chiffres, tirets, points
     return title
 
 
@@ -409,6 +401,8 @@ def merge_media_file_and_subtitles(video_path, subtitle_files_list, download_typ
 
 
 def download_media_file_with_subtitles(whisper_model, download_status, url, title, download_type, download_path, subtitle_generation, subtitle_languages_list, cancel_download):
+    title = string_normalisation(title)
+
     download_media_function_choice={
         "download_video": download_video,
         "download_music": download_music
@@ -424,8 +418,9 @@ def download_media_file_with_subtitles(whisper_model, download_status, url, titl
     if not cancel_download.is_set():
         if not os.path.isfile(download_path + title + "." + media_file_extension):
             if subtitle_generation and (subtitle_languages_list != {}):
-                normalize_title = string_normalisation(title)
-                subtile_build_directory = download_path + normalize_title + "/"
+                subtile_build_directory = download_path + title + "/"
+                print(title)
+                print(subtile_build_directory)
                 os.makedirs(subtile_build_directory , exist_ok=True)
                 download_media_function_choice[download_media_function_name](url, title, download_status, subtile_build_directory, cancel_download)
                 
