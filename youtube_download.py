@@ -47,7 +47,7 @@ def make_hook(url, title, download_status, cancel_download):
             raise yt_dlp.utils.DownloadCancelled("Download cancelled by user")
 
         if d['status'] == 'downloading':
-            download_status[url] = {
+            download_status[url]["data_to_display"] = {
                 "filename": title,
                 "percent": d['_percent_str'],
                 "remaining_time": d['_eta_str']
@@ -141,7 +141,7 @@ def hardware_stats_graph_generation(subtitle_generation_hardware_stats_file_path
 def start_timer(url, filename, duration, download_status, subtitle_generation_progress_queue):
     start_time = time.time()
     running = True
-    download_status[url] = {
+    download_status[url]["data_to_display"] = {
         "filename": filename,
         "status": "Native Subtitle Generation"
     }
@@ -160,9 +160,9 @@ def start_timer(url, filename, duration, download_status, subtitle_generation_pr
             progression_percentage = round((((time.time() - start_time) / duration) * 100), 1)
             if progression_percentage < 100:
 
-                download_status[url]["percent"] = str(progression_percentage)+"%"
+                download_status[url]["data_to_display"]["percent"] = str(progression_percentage)+"%"
             else:
-                download_status[url]["percent"] = "100%"
+                download_status[url]["data_to_display"]["percent"] = "100%"
             subtitle_generation_progress_queue.put(download_status[url])
 
             cores_usage_list = psutil.cpu_percent(interval=1, percpu=True)
@@ -308,7 +308,7 @@ def translate_subtitles(download_status, url, title, input_subtitle_language, in
     for i in range(len(lines)):
         if (not cancel_download.is_set()):
             line = lines[i]
-            download_status[url] = {
+            download_status[url]["data_to_display"] = {
                 "filename": title,
                 "percent": str(round(i/subtitle_original_file_length*100, 1)) + "%",
                 "status": "Subtitle Translation to " + translate_language_label
@@ -419,8 +419,6 @@ def download_media_file_with_subtitles(whisper_model, download_status, url, titl
         if not os.path.isfile(download_path + title + "." + media_file_extension):
             if subtitle_generation and (subtitle_languages_list != {}):
                 subtile_build_directory = download_path + title + "/"
-                print(title)
-                print(subtile_build_directory)
                 os.makedirs(subtile_build_directory , exist_ok=True)
                 download_media_function_choice[download_media_function_name](url, title, download_status, subtile_build_directory, cancel_download)
                 
@@ -438,8 +436,11 @@ def download_media_file_with_subtitles(whisper_model, download_status, url, titl
                 download_media_function_choice[download_media_function_name](url, title, download_status, download_path, cancel_download)
         else:
             download_status[url] = {
-                "filename": title,
-                "status": "Already Downloaded"
+                "data_to_display": {
+                    "filename": title,
+                    "status": "Already Downloaded"
+                },
+                "download_type": download_type
             }
             time.sleep(2)
 
@@ -459,7 +460,7 @@ def download_setup(whisper_model, whisper_size_model, download_status, url, titl
 
     download_media_file_with_subtitles(whisper_model, download_status, url, title, download_type, download_path, subtitle_generation, subtitle_languages_list, cancel_download)
 
-    download_status[url] = {
+    download_status[url]["data_to_display"] = {
         "filename": title,
         "status": "END"
     }
@@ -558,7 +559,7 @@ def server_request_treatment():
         subtitle_languages_list = client_request["subtitle_languages_list"]
 
         if url not in download_status:
-            download_status[url] = {"filename": title, "status": "Initialisation..."}
+            download_status[url] = {"data_to_display": {"filename": title, "status": "Initialisation..."}, "download_type": download_type}
             cancel_download = threading.Event()
             cancel_download_dict[url] = {"cancel_download" : cancel_download}
             thread = threading.Thread(target=download_setup, args=(whisper_model, whisper_size_model, download_status, url, title, download_type, download_path, subtitle_generation, subtitle_languages_list, cancel_download))
