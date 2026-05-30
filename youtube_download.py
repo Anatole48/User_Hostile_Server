@@ -60,6 +60,7 @@ def download_video(url, title, download_status, download_path, cancel_download):
         download_file_path =  download_path + title + '.%(ext)s'
         ydl_opts = {
             'noprogress': True,
+            'cookiefile': 'cookies.txt',
             'retries': 10,
             "quiet": True,
             'progress_hooks': [make_hook(url, title, download_status, cancel_download)],
